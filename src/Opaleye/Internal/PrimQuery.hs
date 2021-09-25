@@ -1,3 +1,5 @@
+{-# LANGUAGE LambdaCase #-}
+
 module Opaleye.Internal.PrimQuery where
 
 import           Prelude hiding (product)
@@ -44,6 +46,47 @@ instance Semigroup Lateral where
 instance Monoid Lateral where
   mappend = (<>)
   mempty = NonLateral
+
+data PrimPrimQueryArr =
+    APrimQuery (Lateral, PrimQuery)
+  | ALeftJoin HPQ.PrimExpr (Lateral, PrimQuery)
+  | ARestrict HPQ.PrimExpr
+  | ASemijoin SemijoinType PrimQuery
+  | ARebind Bool (Bindings HPQ.PrimExpr)
+  | AForUpdate
+  | ALabel String
+
+data PrimQueryArr = PrimQueryArr [PrimPrimQueryArr]
+
+primQueryArr :: PrimPrimQueryArr -> PrimQueryArr
+primQueryArr = PrimQueryArr . pure
+
+instance Semigroup PrimQueryArr where
+  PrimQueryArr x1 <> PrimQueryArr x2 = PrimQueryArr (x1 <> x2)
+
+instance Monoid PrimQueryArr where
+  mappend = (<>)
+  mempty = PrimQueryArr mempty
+
+lateral :: PrimQueryArr -> PrimQueryArr
+lateral (PrimQueryArr pqa) = PrimQueryArr (map lateralPP pqa)
+  where lateralPP :: PrimPrimQueryArr -> PrimPrimQueryArr
+        lateralPP = \case
+          APrimQuery (_, pq) -> APrimQuery (Lateral, pq)
+          ALeftJoin cond (_, pq) -> ALeftJoin cond (Lateral, pq)
+          other -> other
+
+toPrimQuery :: PrimQueryArr -> PrimQuery
+toPrimQuery (PrimQueryArr pqa) = foldl apply Unit pqa
+  where apply :: PrimQuery -> PrimPrimQueryArr -> PrimQuery
+        apply pq = \case
+          APrimQuery (lat, pq') -> times lat pq pq'
+          ALeftJoin cond (lat, pq') -> Join LeftJoin cond (pure pq) (lat, pq')
+          ARestrict cond -> Product (pure (pure pq)) [cond]
+          ASemijoin sjt existsQ -> Semijoin sjt pq existsQ
+          ARebind star bs -> Rebind star bs pq
+          AForUpdate -> ForUpdate pq
+          ALabel l -> Label l pq
 
 -- We use a 'NEL.NonEmpty' for Product because otherwise we'd have to check
 -- for emptiness explicity in the SQL generation phase.

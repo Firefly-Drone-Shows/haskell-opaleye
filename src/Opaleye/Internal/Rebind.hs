@@ -15,4 +15,4 @@ rebind = rebindExplicit def
 rebindExplicit :: Unpackspec a b -> SelectArr a b
 rebindExplicit u = QueryArr (\(a, tag) ->
                      let (b, bindings) = PM.run (runUnpackspec u (PM.extractAttr "rebind" tag) a)
-                     in (b, \_ -> PQ.Rebind True bindings, Tag.next tag))
+                     in (b, PQ.primQueryArr (PQ.ARebind True bindings), Tag.next tag))

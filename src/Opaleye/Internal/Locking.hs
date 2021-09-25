@@ -21,4 +21,4 @@ import qualified Opaleye.Internal.PrimQuery as PQ
 -- enforce those restrictions through its type system so it's very
 -- easy to create queries that fail at run time using this operation.
 forUpdate :: Q.Select a -> Q.Select a
-forUpdate = Q.mapPrimQuery PQ.ForUpdate
+forUpdate = Q.mapPrimQuery PQ.AForUpdate
